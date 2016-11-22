@@ -1,9 +1,5 @@
 #!/usr/bin/python
-"""
-    testing some dope shit
-"""
-## TODO:
-# 
+"""usage: liz <command> [<args>]"""
 import os
 import getopt
 import sys
@@ -33,7 +29,11 @@ SAMPLE_CONFIG = """
 }
 """
 
-IS_VERBOSE = False
+IS_VERBOSE = True 
+
+def _pprint(data):
+    import json
+    print json.dumps(data, indent=2)
 
 def _fatal(msg):
     print("fatal: " + msg)
@@ -63,15 +63,19 @@ def init(opts, args):
     with open(default_routes_fn, 'w') as f:
         f.write(SAMPLE_ROUTES)
 
-def _fatal_error(msg):
-    import sys
-    print "fatal: " + msg
-    sys.exit(1)
-
 def build(opts=None, args=None):
+    """Build a liz project.
+    Args:
+        `opts` Global options passed to liz.
+        `args` Options supplied after command.
+    """
+    import getopt
     import json
     import os
     import sys
+    from jinja2 import Environment, FileSystemLoader
+    
+    # Make sure we're in a liz project and it's properly configured.
     if not os.path.exists(config_fn):
         print "fatal: not a liz project."
         sys.exit(1)
@@ -81,48 +85,84 @@ def build(opts=None, args=None):
         data = json.loads(content)
         config = data
     if not config:
-        _fatal_error("couldn't parse project config.")
+        _fatal("couldn't parse project config.")
 
-    from jinja2 import Environment, FileSystemLoader
+    # Parse command arguments.
+    try:
+        nopts, nargs = getopt.getopt(args, 
+            "vhs:", ["verbose', help", "path-suffix="])
+        if nargs:
+            _fatal("'build' doesn't accept any arguments.")
+    except getopt.GetoptError:
+        print __doc__
+        sys.exit(1)
+    options = sum([opts + nopts], [])
+    for opt, arg in options:
+        if opt in ('-h', '--help'):
+            print __doc__
+            sys.exit()
+        elif opt in ('-s', '--path-suffix'):
+            config['path-suffix'] = arg
+        elif opt in ('-v', '--verbose'):
+            pass
+    print options
+    if IS_VERBOSE:
+        print 'build config =>'
+        print options
 
     # Look for Jinja templates in 'templates/'.
-    print config
+    if IS_VERBOSE:
+        print 'liz config =>'
+        print json.dumps(config, indent=2)
     templates_dir = config.get('templates')
     if not templates_dir:
-        _fatal_error("malformed project config.")
-        
+        _fatal("malformed project config.")
     env = Environment(loader=FileSystemLoader(templates_dir))
 
-    # This should be able to be specified by a command-line argument.
+    #TODO: This should be able to be specified by a command-line
+    # argument.
     build_dir = config.get('build')
     if not os.path.exists(build_dir):
         os.makedirs(build_dir)
 
-    # By default, the list of routes is an attribute called
-    # "routes". This can be overridden by supplying a `--routes`
-    # option to the build.
-    route = 'routes'
-    for flag, value in opts:
-        if flag == '--routes':
-            route = value
 
     # Figure out which routes file to load from config.
     routes_fn = config.get('routes')
     routes = []
     with open(routes_fn, 'r') as f:
         routes_d = json.loads(f.read())
+    if IS_VERBOSE:
+        print "\nloaded routes =>"
+        print json.dumps(routes_d, indent=2)
 
     # Build list of routes.
+    urls = {}  # for finding routes in the template
+    env.globals['url'] = lambda name: urls[name]
+
+    def get_path(route):
+        path = route.get('path') or path.get('name')
+        if 'path-suffix' in config:
+            path += config['path-suffix']
+        return path
     try:
-        routes = routes_d[route]
+        # By default, the list of routes is an attribute called
+        # "routes". 
+        routes = routes_d["routes"]
+        for route in routes:
+            if 'name' in route:
+                name = route['name']
+                urls[name] = get_path(route)
     except KeyError:
         _fatal("routes '%s' not in '%s'." % (route, routes_fn))
-    print json.dumps(routes_d, indent=2)
-    
+    if IS_VERBOSE:
+        print "URLs =>"
+        _pprint(urls)
+
+    # Build project and render each route.
     for route in routes:
         loader = env.get_template(route['template'])
         content = loader.render(route.get('data', {}))
-        path = route['path']
+        path = get_path(route)
         with open(build_dir + path, 'w') as f:
             content = content.encode('utf8')
             f.write(content)
@@ -130,7 +170,7 @@ def build(opts=None, args=None):
 def main(argv):
     try:
         opts, args = getopt.getopt(argv, 
-            "vhr:", ["verbose', help", "routes="])
+            "vhr:", ["verbose", "help", "routes="])
     except getopt.GetoptError:
         print __doc__
         sys.exit(1)
@@ -145,18 +185,19 @@ def main(argv):
             print opts
             print 'args ->'
             print args
-    if not args:
-        build(opts)
-    elif len(args) > 1:
-        _fatal("too many commands supplied: " + str(args))
+
+    # Figure out which command to call.
+    try:
+        command = args.pop(0)
+    except IndexError:
+        print __doc__
+        sys.exit()
+    if command == 'init':
+        init(opts, args)
+    elif command == 'build':
+        build(opts, args)
     else:
-        command = args[0]
-        if command == 'init':
-            init(opts, args)
-        elif command == 'build':
-            build(opts, args)
-        else:
-            _fatal("unknown command: " + command)
+        _fatal("unknown command: " + command)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
