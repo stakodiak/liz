@@ -142,7 +142,9 @@ def build(opts=None, args=None):
     def get_path(route):
         path = route.get('path') or path.get('name')
         if 'path-suffix' in config:
-            path += config['path-suffix']
+            suffix = config['path-suffix']
+            if not path.endswith(suffix) and not '://' in path:
+                path += suffix
         return path
     try:
         # By default, the list of routes is an attribute called
@@ -160,7 +162,11 @@ def build(opts=None, args=None):
 
     # Build project and render each route.
     for route in routes:
-        loader = env.get_template(route['template'])
+        template = route.get('template')
+        # Some routes are for external routing.
+        if not template:  
+            continue
+        loader = env.get_template(template)
         content = loader.render(route.get('data', {}))
         path = get_path(route)
         with open(build_dir + path, 'w') as f:
