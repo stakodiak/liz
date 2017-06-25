@@ -1,0 +1,14 @@
+
+{
+  "routes": [
+    {
+      "path": "index.html", 
+      "data": {
+        "fish": [
+            "sticks"
+        ]
+      }, 
+      "template": "home.html"
+    }
+  ]
+}
