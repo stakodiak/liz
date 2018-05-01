@@ -284,7 +284,8 @@ def build(opts=None, args=None):
             content = content.encode('utf8')
             f.write(content)
 
-def main(argv):
+def main():
+    argv = sys.argv[1:]
     try:
         opts, args = getopt.getopt(argv,
             "vhr:", ["verbose", "help", "routes="])
@@ -316,5 +317,3 @@ def main(argv):
     else:
         _fatal("unknown command: " + command)
 
-if __name__ == '__main__':
-    main(sys.argv[1:])
