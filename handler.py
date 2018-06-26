@@ -1,9 +1,16 @@
 #!/usr/bin/python
 """usage: liz <command> [<args>]"""
+import getopt
 import json
 import os
-import getopt
 import sys
+from jinja2 import Environment, FileSystemLoader
+
+
+def sass_filter(text):
+    import sass
+    return sass.compile(string=text)
+
 
 
 SAMPLE_STYLES_SCSS = """
@@ -112,7 +119,6 @@ SAMPLE_CONFIG = """
 IS_VERBOSE = True
 
 def _pprint(data):
-    import json
     print json.dumps(data, indent=2)
 
 def _fatal(msg):
@@ -180,11 +186,6 @@ def build(opts=None, args=None):
         `opts` Global options passed to liz.
         `args` Options supplied after command.
     """
-    import getopt
-    import json
-    import os
-    import sys
-    from jinja2 import Environment, FileSystemLoader
 
     # Make sure we're in a liz project and it's properly configured.
     if not os.path.exists(config_fn):
@@ -228,6 +229,7 @@ def build(opts=None, args=None):
     templates_dir = config.get('templates')
     if not templates_dir:
         _fatal("malformed project config.")
+    # TODO: add custom functions here
     env = Environment(loader=FileSystemLoader(templates_dir))
 
     #TODO: This should be able to be specified by a command-line
