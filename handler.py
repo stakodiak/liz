@@ -119,7 +119,7 @@ SAMPLE_CONFIG = """
 IS_VERBOSE = True
 
 def _pprint(data):
-    print json.dumps(data, indent=2)
+    print(json.dumps(data, indent=2))
 
 def _fatal(msg):
     print("fatal: " + msg)
@@ -189,7 +189,7 @@ def build(opts=None, args=None):
 
     # Make sure we're in a liz project and it's properly configured.
     if not os.path.exists(config_fn):
-        print "fatal: not a liz project."
+        print("fatal: not a liz project.")
         sys.exit(1)
     config = None
     with open(config_fn, 'r') as f:
@@ -206,26 +206,26 @@ def build(opts=None, args=None):
         if nargs:
             _fatal("'build' doesn't accept any arguments.")
     except getopt.GetoptError:
-        print __doc__
+        print(__doc__)
         sys.exit(1)
     options = sum([opts + nopts], [])
     for opt, arg in options:
         if opt in ('-h', '--help'):
-            print __doc__
+            print(__doc__)
             sys.exit()
         elif opt in ('-s', '--path-suffix'):
             config['path-suffix'] = arg
         elif opt in ('-v', '--verbose'):
             pass
-    print options
+    print(options)
     if IS_VERBOSE:
-        print 'build config =>'
-        print options
+        print('build config =>')
+        print(options)
 
     # Look for Jinja templates in 'templates/'.
     if IS_VERBOSE:
-        print 'liz config =>'
-        print json.dumps(config, indent=2)
+        print('liz config =>')
+        print(json.dumps(config, indent=2))
     templates_dir = config.get('templates')
     if not templates_dir:
         _fatal("malformed project config.")
@@ -245,8 +245,8 @@ def build(opts=None, args=None):
     with open(routes_fn, 'r') as f:
         routes_d = json.loads(f.read())
     if IS_VERBOSE:
-        print "\nloaded routes =>"
-        print json.dumps(routes_d, indent=2)
+        print("\nloaded routes =>")
+        print(json.dumps(routes_d, indent=2))
 
     # Build list of routes.
     urls = {}  # for finding routes in the template
@@ -270,7 +270,7 @@ def build(opts=None, args=None):
     except KeyError:
         _fatal("routes '%s' not in '%s'." % (route, routes_fn))
     if IS_VERBOSE:
-        print "URLs =>"
+        print("URLs =>")
         _pprint(urls)
 
     # Build project and render each route.
@@ -291,25 +291,25 @@ def main(argv):
         opts, args = getopt.getopt(argv,
             "vhr:", ["verbose", "help", "routes="])
     except getopt.GetoptError:
-        print __doc__
+        print(__doc__)
         sys.exit(1)
 
     for opt, arg in opts:
         if opt in ('-h', '--help'):
-            print __doc__
+            print(__doc__)
             sys.exit()
         elif opt in ('-v', '--verbose'):
             IS_VERBOSE = True
-            print 'opts ->'
-            print opts
-            print 'args ->'
-            print args
+            print('opts ->')
+            print(opts)
+            print('args ->')
+            print(args)
 
     # Figure out which command to call.
     try:
         command = args.pop(0)
     except IndexError:
-        print __doc__
+        print(__doc__)
         sys.exit()
     if command == 'init':
         init(opts, args)
