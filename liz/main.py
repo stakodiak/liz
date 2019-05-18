@@ -4,6 +4,12 @@
 commands:
     init <name>  Creates a standard web project
     build  Generates templates according to liz config
+
+options:
+    -h  Print this message
+    -v  Print project info when building
+
+docs: https://github.com/stakodiak/liz
 """
 import json
 import os
