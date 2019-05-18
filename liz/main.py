@@ -1,5 +1,10 @@
 #!/usr/bin/python
-"""usage: liz <command> [<args>]"""
+"""usage: liz <command> [<args>]
+
+commands:
+    init <name>  Creates a standard web project
+    build  Generates templates according to liz config
+"""
 import json
 import os
 import getopt
