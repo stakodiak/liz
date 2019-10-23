@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/local/bin/python3
 """usage: liz <command> [<args>]
 
 commands:
@@ -16,10 +16,74 @@ import os
 import getopt
 import sys
 
+from typing import Optional, Any, Dict
+
+import yaml
+
+
+import os
+import yaml
+
+class EnvYAMLTag(yaml.YAMLObject):
+    yaml_tag = u'!env'
+    def __init__(self, env_var):
+        value = os.environ.get(env_var)
+        self.value = value
+
+    def __repr__(self):
+        return self.value
+
+    @classmethod
+    def from_yaml(cls, loader, node):
+        return EnvYAMLTag(node.value)
+
+    @classmethod
+    def to_yaml(cls, dumper, data):
+        return dumper.represent_scalar(cls.yaml_tag, data.value)
+
+
+class ShellYAMLTag(yaml.YAMLObject):
+    yaml_tag = u'!sh'
+    def __init__(self, cmd_unsafe):
+        import subprocess
+        import shlex
+        cmd = shlex.split(cmd_unsafe)
+        output = subprocess.run(cmd, capture_output=True)
+        self.value = output.stdout
+
+    def __repr__(self):
+        return self.value.decode('utf-8')
+
+    @classmethod
+    def from_yaml(cls, loader, node):
+        return ShellYAMLTag(node.value)
+
+    @classmethod
+    def to_yaml(cls, dumper, data):
+        return dumper.represent_scalar(cls.yaml_tag, data.value)
+
+
+class FileYAMLTag(yaml.YAMLObject):
+    yaml_tag = u'!file'
+    def __init__(self, filename):
+        content = open(filename).read()
+        self.value = content
+
+    def __repr__(self):
+        return self.value
+
+    @classmethod
+    def from_yaml(cls, loader, node):
+        return FileYAMLTag(node.value)
+
+    @classmethod
+    def to_yaml(cls, dumper, data):
+        return dumper.represent_scalar(cls.yaml_tag, data.value)
+
 
 SAMPLE_STYLES_SCSS = """
 /* resets */
-html, body, h1, h2, h3, h4, h5, h6 {
+* {
   margin: 0;
   padding: 0;
 }
@@ -49,35 +113,22 @@ html, body {
 }
 """
 
-# TODO:  give this puppy a port lookup. these project absolutely should
-# be stateless.
+# TODO:  give this puppy a port lookup
 SAMPLE_MAKEFILE = """
-s3_bucket_name = www.cedriceats.com
+s3_bucket_name = # S3 bucket?
 deploy:
-	s3put -b $(s3_bucket_name) --header "Content-Type=text/html" -p "`pwd`/build" build/*
-	s3put -b $(s3_bucket_name) -p "`pwd`" assets/css/
-deploy-assets:
-	s3put -b $(s3_bucket_name) -p "`pwd`" assets/*
+	aws s3 sync build/ s3://$(s3_bucket_name) --cache-control no-cache
 clean:
 	rm -fr build/
-port = 8809
+port = 10101
 run:
 	open -a 'Google Chrome' "http://localhost:$(port)"
-	python -m SimpleHTTPServer $(port)
+	python3 -m http.server $(port)
 """
 
 SAMPLE_BASE_TEMPLATE = """
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-
-<!-- jQuery -->
-<script src="https://code.jquery.com/jquery-3.1.1.min.js" ></script>
-
-<!-- Bootstrap CSS -->
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
-
-<!-- Bootstrap JS -->
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 
 <title>{% block title %}{% endblock %}</title>
 <link rel="stylesheet" href="/assets/css/styles.css">
@@ -97,34 +148,23 @@ SAMPLE_HOME_TEMPLATE = """
 {% endblock content %}
 """
 
-SAMPLE_ROUTES = """
-{
-  "routes": [
-    {
-      "path": "index.html",
-      "template": "home.html",
-      "data": {
-        "fish": "sticks"
-      }
-    }
-  ]
-}
-"""
-config_fn = '.liz.config'
+config_fn = 'liz.yml'
 
 SAMPLE_CONFIG = """
-{
-  "routes": "routes.json",
-  "templates": "templates",
-  "build": "build/"
-}
+templates: templates
+build: build/
+routes:
+  - path: index.html
+    template: "home.html"
+    data:
+      dish: sticks
 """
 
 IS_VERBOSE = True
 
 def _pprint(data):
     import json
-    print json.dumps(data, indent=2)
+    print(json.dumps(data, indent=2, default=str))
 
 def _fatal(msg):
     print("fatal: " + msg)
@@ -134,25 +174,20 @@ def init(opts, args):
     """Initialize empty liz project.
 
     This creates the required file hierarchy:
-        .liz.config
         /templates
-        routes.json
+        liz.yml
 
-    This can be used as a starting point for developing a static site.
-    You can create a Makefile to handle deployments once the build is
-    finished. Another good idea is to create an assets/ directory to
-    handle static files like JS, SCSS and images. The Makefile can
-    deploy each of these separately.
+    This can be used as a starting point for developing a
+    static site.  You can create a Makefile to handle
+    deployments once the build is finished. Another good
+    idea is to create an assets/ directory to handle static
+    files like JS, SCSS and images. The Makefile can deploy
+    each of these separately.
     """
     if os.path.exists(config_fn):
         _fatal("project already initialized.")
     with open(config_fn, 'w') as f:
         f.write(SAMPLE_CONFIG)
-    ## TODO: put build dir, templates dir in liz config
-    # Make sure you don't overwrite this file, ya dingus.
-    default_routes_fn = 'routes.json'
-    with open(default_routes_fn, 'w') as f:
-        f.write(SAMPLE_ROUTES)
 
     # Make sure the project has a Makefile.
     with open('Makefile', 'w') as f:
@@ -170,7 +205,7 @@ def init(opts, args):
         f.write(SAMPLE_STYLES_SCSS)
 
     # Write starter templates so you can get running.
-    templates_dir = json.loads(SAMPLE_CONFIG)['templates']
+    templates_dir = "templates"
     try:
         os.makedirs(templates_dir)
     except OSError:
@@ -185,7 +220,22 @@ def init(opts, args):
     with open(os.path.join(templates_dir, sample_home_template), 'w') as f:
         f.write(SAMPLE_HOME_TEMPLATE)
 
-def build(opts=None, args=None):
+def load_file(filename: str, filetype: Optional[str] = None) -> Dict[Any, Any]:
+    data = None
+    if not filetype:
+        if filename.endswith('json'):
+            filetype = "json"
+        elif filename.endswith('yml') or filename.endswith('yaml'):
+            filetype = "yaml"
+    with open(filename, 'r') as f:
+        content = f.read()
+        if filetype == 'json':
+            data = json.loads(content)
+        elif filetype == 'yaml':
+            data = yaml.load(content)
+    return data
+
+def build(opts=None, args=None) -> None:
     """Build a liz project.
     Args:
         `opts` Global options passed to liz.
@@ -199,13 +249,11 @@ def build(opts=None, args=None):
 
     # Make sure we're in a liz project and it's properly configured.
     if not os.path.exists(config_fn):
-        print "fatal: not a liz project."
+        print("fatal: not a liz project.")
         sys.exit(1)
-    config = None
-    with open(config_fn, 'r') as f:
-        content = f.read()
-        data = json.loads(content)
-        config = data
+
+    # TODO Convert liz.config to yaml format
+    config = load_file(config_fn, "yaml")
     if not config:
         _fatal("couldn't parse project config.")
 
@@ -216,70 +264,88 @@ def build(opts=None, args=None):
         if nargs:
             _fatal("'build' doesn't accept any arguments.")
     except getopt.GetoptError:
-        print __doc__
+        print(__doc__)
         sys.exit(1)
     options = sum([opts + nopts], [])
     for opt, arg in options:
         if opt in ('-h', '--help'):
-            print __doc__
+            print(__doc__)
             sys.exit()
         elif opt in ('-s', '--path-suffix'):
             config['path-suffix'] = arg
         elif opt in ('-v', '--verbose'):
             pass
-    print options
+    print(options)
     if IS_VERBOSE:
-        print 'build config =>'
-        print options
+        print('build config =>')
+        print(options)
 
     # Look for Jinja templates in 'templates/'.
     if IS_VERBOSE:
-        print 'liz config =>'
-        print json.dumps(config, indent=2)
+        print('liz config =>')
+        _pprint(config)
     templates_dir = config.get('templates')
     if not templates_dir:
-        _fatal("malformed project config.")
+        templates_dir = "."
     env = Environment(loader=FileSystemLoader(templates_dir))
 
-    #TODO: This should be able to be specified by a command-line
-    # argument.
+    # TODO This should be able to be specified by a
+    # command-line argument.
     build_dir = config.get('build')
     if not os.path.exists(build_dir):
         os.makedirs(build_dir)
 
-
     # Figure out which routes file to load from config.
     routes_fn = config.get('routes')
     routes = []
-    with open(routes_fn, 'r') as f:
-        routes_d = json.loads(f.read())
+    if type(routes_fn) is str:
+        routes_d = load_file(routes_fn)
+    else:
+        routes_d = routes_fn
+
     if IS_VERBOSE:
-        print "\nloaded routes =>"
-        print json.dumps(routes_d, indent=2)
+        print("\nloaded routes =>")
+        _pprint(routes_d)
 
     # Build list of routes.
     urls = {}  # for finding routes in the template
     env.globals['url'] = lambda name: urls[name]
+    global_data = config.get("data", {})
+    env.globals['data'] = global_data
+
+    template_globals = config.get("config")
+    if template_globals:
+        for k, v in template_globals.items():
+            env.globals[k] = v
 
     def get_path(route):
-        path = route.get('path') or path.get('name')
+        path = route.get('path') or route.get('name')
         if 'path-suffix' in config:
             suffix = config['path-suffix']
+            if path.startswith('/'):
+                path = path[1:]
             if not path.endswith(suffix) and not '://' in path:
                 path += suffix
+            if path.endswith("index.html"):
+                path = path[:-len('index.html')]
         return path
     try:
-        # By default, the list of routes is an attribute called
-        # "routes".
-        routes = routes_d["routes"]
+        # By default, the list of routes is an attribute
+        # called "routes".
+        routes = routes_d
         for route in routes:
             if 'name' in route:
                 name = route['name']
                 urls[name] = get_path(route)
+                is_absolute_url = '://' in get_path(route)
+                if not is_absolute_url:
+                    urls[name] = '/' + get_path(route)
+            elif 'path' in route:
+                urls[route['path']] = route['template']
     except KeyError:
         _fatal("routes '%s' not in '%s'." % (route, routes_fn))
     if IS_VERBOSE:
-        print "URLs =>"
+        print("URLs =>")
         _pprint(urls)
 
     # Build project and render each route.
@@ -288,38 +354,52 @@ def build(opts=None, args=None):
         # Some routes are for external routing.
         if not template:
             continue
+        #
         loader = env.get_template(template)
-        content = loader.render(route.get('data', {}))
-        path = get_path(route)
-        with open(build_dir + path, 'w') as f:
-            content = content.encode('utf8')
-            f.write(content)
+        data = global_data
+        if route.get('data'):
+            data.update(**route.get('data'))
+            if IS_VERBOSE:
+                _pprint(data)
+        content = loader.render(data)
 
-def main():
+        path = os.path.join(build_dir, get_path(route))
+        head, tail = os.path.split(path)
+        os.makedirs(head, exist_ok=True)
+        try:
+            with open(path, 'wb') as f:
+                content = content.encode('utf8')
+                f.write(content)
+        except IsADirectoryError:
+            with open(path + 'index.html', 'wb') as f:
+                content = content.encode('utf8')
+                f.write(content)
+
+def main() -> None:
     argv = sys.argv[1:]
     try:
         opts, args = getopt.getopt(argv,
             "vhr:", ["verbose", "help", "routes="])
     except getopt.GetoptError:
-        print __doc__
+        print(__doc__)
         sys.exit(1)
 
     for opt, arg in opts:
         if opt in ('-h', '--help'):
-            print __doc__
+            print(__doc__)
             sys.exit()
         elif opt in ('-v', '--verbose'):
             IS_VERBOSE = True
-            print 'opts ->'
-            print opts
-            print 'args ->'
-            print args
+            print('opts ->')
+            print(opts)
+            print('args ->')
+            print(args)
 
     # Figure out which command to call.
     try:
         command = args.pop(0)
     except IndexError:
-        print __doc__
+        print(__doc__)
         sys.exit()
     if command == 'init':
         init(opts, args)
@@ -327,4 +407,8 @@ def main():
         build(opts, args)
     else:
         _fatal("unknown command: " + command)
+
+
+if __name__ == '__main__':
+    main()
 
