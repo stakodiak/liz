@@ -81,6 +81,31 @@ class FileYAMLTag(yaml.YAMLObject):
         return dumper.represent_scalar(cls.yaml_tag, data.value)
 
 
+class YAMLDocTag(yaml.YAMLObject):
+    """
+    Shapes structured and unstructured data into YAML object:
+    
+    """
+    yaml_tag = u'!data-doc'
+    def __init__(self, filename):
+        content = open(filename).read()
+        data, doc = (lambda args: args[0], ''.join(args[1:]))(content.split('==='))
+        self.value = yaml.load(data)
+        self.value['doc'] = doc
+
+    def __repr__(self):
+        return self.value
+
+    @classmethod
+    def from_yaml(cls, loader, node):
+        return FileYAMLTag(node.value)
+
+    @classmethod
+    def to_yaml(cls, dumper, data):
+        return dumper.represent_scalar(cls.yaml_tag, data.value)
+
+
+
 SAMPLE_STYLES_SCSS = """
 /* resets */
 * {
@@ -319,7 +344,10 @@ def build(opts=None, args=None) -> None:
             env.globals[k] = v
 
     def get_path(route):
-        path = route.get('path') or route.get('name')
+        if 'page' in route:
+            path = route.get('page')
+        else:
+            path = route.get('path') or route.get('name')
         if 'path-suffix' in config:
             suffix = config['path-suffix']
             if path.startswith('/'):
@@ -334,8 +362,8 @@ def build(opts=None, args=None) -> None:
         # called "routes".
         routes = routes_d
         for route in routes:
-            if 'name' in route:
-                name = route['name']
+            if 'name' in route or 'page' in route:
+                name = route.get('name') or route.get('page')
                 urls[name] = get_path(route)
                 is_absolute_url = '://' in get_path(route)
                 if not is_absolute_url:

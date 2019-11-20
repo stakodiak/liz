@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3.7
 """usage: liz <command> [<args>]"""
 import getopt
 import json
@@ -252,7 +252,7 @@ def build(opts=None, args=None):
     urls = {}  # for finding routes in the template
     env.globals['url'] = lambda name: urls[name]
 
-    def get_path(route):
+    def _get_path(route):
         path = route.get('path') or path.get('name')
         if 'path-suffix' in config:
             suffix = config['path-suffix']
@@ -266,7 +266,7 @@ def build(opts=None, args=None):
         for route in routes:
             if 'name' in route:
                 name = route['name']
-                urls[name] = get_path(route)
+                urls[name] = _get_path(route)
     except KeyError:
         _fatal("routes '%s' not in '%s'." % (route, routes_fn))
     if IS_VERBOSE:
@@ -280,9 +280,13 @@ def build(opts=None, args=None):
         if not template:
             continue
         loader = env.get_template(template)
+        # TODO add liz `data` env JSON
         content = loader.render(route.get('data', {}))
-        path = get_path(route)
-        with open(build_dir + path, 'w') as f:
+        # 
+        path = os.path.join(build_dir, _get_path(route))
+        head, tail = os.path.split(path)
+        os.makedirs(head, exist_ok=True)
+        with open(path, 'w') as f:
             content = content.encode('utf8')
             f.write(content)
 
